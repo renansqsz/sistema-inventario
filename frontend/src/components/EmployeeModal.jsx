@@ -20,7 +20,7 @@ function EmployeeModal({ isOpen, onClose, onSave, employee }) {
           setFormData(prev => ({ ...prev, escritorio: response.data[0] }));
         }
       } catch (err) {
-        console.error('Erro ao buscar escritorios:', err);
+        console.error('Erro ao buscar escritórios:', err);
       }
     };
     if (isOpen) fetchOffices();
@@ -71,28 +71,28 @@ function EmployeeModal({ isOpen, onClose, onSave, employee }) {
           <h3>{employee ? 'Editar Colaborador' : 'Novo Colaborador'}</h3>
           <button className="close-btn" onClick={onClose}><FiX /></button>
         </div>
-        
+
         <form onSubmit={handleSubmit}>
           <div className="input-group">
             <label>Nome Completo</label>
-            <input 
-              type="text" 
-              name="nome" 
-              value={formData.nome} 
-              onChange={handleChange} 
-              className="input-field" 
+            <input
+              type="text"
+              name="nome"
+              value={formData.nome}
+              onChange={handleChange}
+              className="input-field"
               placeholder="Ex: João Silva"
-              required 
+              required
             />
           </div>
-          
+
           <div className="input-group">
             <label>Escritório</label>
-            <select 
-              name="escritorio" 
-              value={formData.escritorio} 
-              onChange={handleChange} 
-              className="input-field" 
+            <select
+              name="escritorio"
+              value={formData.escritorio}
+              onChange={handleChange}
+              className="input-field"
               required
             >
               <option value="">Selecione um escritório</option>

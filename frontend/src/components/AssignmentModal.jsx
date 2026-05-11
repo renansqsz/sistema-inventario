@@ -128,7 +128,7 @@ function AssignmentModal({ isOpen, onClose, onAssigned, equipments }) {
     }
 
     if (!formData.office) {
-      setError('Selecione o escritorio da atribuicao.');
+      setError('Selecione o escritório da atribuição.');
       return;
     }
 
@@ -147,7 +147,7 @@ function AssignmentModal({ isOpen, onClose, onAssigned, equipments }) {
       console.error('Erro ao atribuir equipamento:', requestError);
       setError(
         requestError.response?.data?.error
-        || 'Nao foi possivel concluir a atribuicao.'
+        || 'Não foi possível concluir a atribuição.'
       );
     } finally {
       setSubmitting(false);
@@ -210,7 +210,7 @@ function AssignmentModal({ isOpen, onClose, onAssigned, equipments }) {
                 ) : (
                   equipments.map((equipment) => (
                     <option key={equipment.id} value={equipment.id}>
-                      {`${equipment.name} | ${equipment.category} | disponivel: ${equipment.availableQuantity}`}
+                      {`${equipment.name} | ${equipment.category} | disponível: ${equipment.availableQuantity}`}
                     </option>
                   ))
                 )}
@@ -231,7 +231,7 @@ function AssignmentModal({ isOpen, onClose, onAssigned, equipments }) {
             </div>
 
             <div className="input-group">
-              <label>Escritorio</label>
+              <label>Escritório</label>
               <select
                 name="office"
                 value={formData.office}
@@ -241,7 +241,7 @@ function AssignmentModal({ isOpen, onClose, onAssigned, equipments }) {
                 disabled={loading || offices.length === 0}
               >
                 {offices.length === 0 ? (
-                  <option value="">Nenhum escritorio disponivel</option>
+                  <option value="">Nenhum escritório disponível</option>
                 ) : (
                   offices.map((office) => (
                     <option key={office} value={office}>
@@ -253,7 +253,7 @@ function AssignmentModal({ isOpen, onClose, onAssigned, equipments }) {
             </div>
 
             <div className="input-group" style={{ gridColumn: 'span 2' }}>
-              <label>Funcionario</label>
+              <label>Funcionário</label>
               <select
                 name="employeeId"
                 value={formData.employeeId}
@@ -263,7 +263,7 @@ function AssignmentModal({ isOpen, onClose, onAssigned, equipments }) {
                 disabled={loading || employeesForOffice.length === 0}
               >
                 {employeesForOffice.length === 0 ? (
-                  <option value="">Nenhum funcionario disponivel</option>
+                  <option value="">Nenhum funcionário disponível</option>
                 ) : (
                   employeesForOffice.map((employee) => (
                     <option key={employee.id} value={employee.id}>
@@ -321,7 +321,7 @@ function AssignmentModal({ isOpen, onClose, onAssigned, equipments }) {
 
             {selectedEquipment && Number(selectedEquipment.availableQuantity) <= 0 && (
               <p style={{ color: '#991B1B', marginTop: '0.75rem', fontSize: '0.875rem' }}>
-                Este equipamento aparece na lista, mas nao possui saldo disponivel para atribuicao.
+                Este equipamento aparece na lista, mas não possui saldo disponível para atribuição.
               </p>
             )}
           </div>

@@ -7,6 +7,23 @@ const db = require('./database');
 
 const app = express();
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-inventario';
+const NEWS_CACHE_TTL_MS = 15 * 60 * 1000;
+const NEWS_FEEDS = [
+  {
+    type: 'IA',
+    url: 'https://news.google.com/rss/search?q=inteligencia+artificial&hl=pt-BR&gl=BR&ceid=BR:pt-419',
+    image: 'https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80'
+  }
+];
+let newsCache = {
+  items: [],
+  updatedAt: 0
+};
+const TECH_BANNER_IMAGES = [
+  'https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80',
+  'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1200&q=80',
+  'https://images.unsplash.com/photo-1535223289827-42f1e9919769?auto=format&fit=crop&w=1200&q=80'
+];
 
 app.use(cors());
 app.use(express.json());
@@ -49,6 +66,87 @@ const rollbackTransaction = (res, statusCode, message, err) => {
 
     res.status(statusCode).json({ error: message });
   });
+};
+
+const decodeXmlEntities = (value = '') =>
+  value
+    .replace(/<!\[CDATA\[(.*?)\]\]>/gs, '$1')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCharCode(parseInt(code, 16)))
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .trim();
+
+const stripHtml = (value = '') =>
+  decodeXmlEntities(value)
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const extractTagValue = (source, tagName) => {
+  const match = source.match(new RegExp(`<${tagName}[^>]*>([\\s\\S]*?)<\\/${tagName}>`, 'i'));
+  return match ? match[1] : '';
+};
+
+const parseRssItems = (xml, type) => {
+  const itemMatches = xml.match(/<item\b[\s\S]*?<\/item>/gi) || [];
+
+  return itemMatches.map((item, index) => {
+    const title = stripHtml(extractTagValue(item, 'title'));
+    const link = decodeXmlEntities(extractTagValue(item, 'link'));
+    const description = stripHtml(extractTagValue(item, 'description'));
+    const pubDate = stripHtml(extractTagValue(item, 'pubDate'));
+    const image = TECH_BANNER_IMAGES[index % TECH_BANNER_IMAGES.length];
+
+    return {
+      title,
+      link,
+      description: description || 'Leia a cobertura completa para acompanhar a atualizacao.',
+      pubDate,
+      category: type,
+      image
+    };
+  });
+};
+
+const fetchNewsFeed = async ({ type, url, image }) => {
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': 'inventory-system-news-bot/1.0'
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Falha ao buscar feed ${type}: ${response.status}`);
+  }
+
+  const xml = await response.text();
+  return parseRssItems(xml, type, image);
+};
+
+const getFreshNews = async () => {
+  const now = Date.now();
+  if (newsCache.items.length > 0 && now - newsCache.updatedAt < NEWS_CACHE_TTL_MS) {
+    return newsCache;
+  }
+
+  const feedResults = await Promise.all(NEWS_FEEDS.map(fetchNewsFeed));
+  const items = feedResults
+    .flat()
+    .filter((item) => item.title && item.link)
+    .sort((a, b) => new Date(b.pubDate || 0) - new Date(a.pubDate || 0))
+    .slice(0, 3);
+
+  newsCache = {
+    items,
+    updatedAt: now
+  };
+
+  return newsCache;
 };
 
 app.post('/api/auth/login', (req, res) => {
@@ -938,6 +1036,21 @@ app.get('/api/categories', authenticateToken, (req, res) => {
 
     res.json(rows);
   });
+});
+
+app.get('/api/news', authenticateToken, async (req, res) => {
+  try {
+    const payload = await getFreshNews();
+    res.json(payload);
+  } catch (error) {
+    console.error('Erro ao buscar noticias externas:', error.message);
+
+    if (newsCache.items.length > 0) {
+      return res.json(newsCache);
+    }
+
+    res.status(502).json({ error: 'Nao foi possivel carregar informativos externos' });
+  }
 });
 
 app.post('/api/categories', authenticateToken, (req, res) => {
