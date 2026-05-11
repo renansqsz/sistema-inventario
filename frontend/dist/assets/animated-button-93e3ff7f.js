@@ -1,0 +1,1 @@
+import{j as t}from"./index-48cb3c16.js";const n=({children:s,className:r="",...e})=>t.jsxs("button",{className:`btn ${r}`,...e,children:[t.jsx("svg",{className:"btn-border",width:"100%",height:"100%",children:t.jsx("rect",{x:"0",y:"0",width:"100%",height:"100%",rx:"6",ry:"6",pathLength:"100"})}),s]});export{n as B};
