@@ -68,22 +68,52 @@ const rollbackTransaction = (res, statusCode, message, err) => {
   });
 };
 
-const decodeXmlEntities = (value = '') =>
-  value
-    .replace(/<!\[CDATA\[(.*?)\]\]>/gs, '$1')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCharCode(parseInt(code, 16)))
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .trim();
+const HTML_ENTITY_MAP = {
+  '&nbsp;': ' ',
+  '&amp;': '&',
+  '&quot;': '"',
+  '&#39;': "'",
+  '&lt;': '<',
+  '&gt;': '>',
+  '&apos;': "'",
+  '&mdash;': '-',
+  '&ndash;': '-',
+  '&hellip;': '...'
+};
+
+const decodeXmlEntities = (value = '') => {
+  let decoded = String(value).replace(/<!\[CDATA\[(.*?)\]\]>/gs, '$1');
+
+  for (let index = 0; index < 3; index += 1) {
+    let nextValue = decoded;
+
+    Object.entries(HTML_ENTITY_MAP).forEach(([entity, replacement]) => {
+      nextValue = nextValue.replace(new RegExp(entity, 'gi'), replacement);
+    });
+
+    nextValue = nextValue
+      .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+      .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCharCode(parseInt(code, 16)));
+
+    if (nextValue === decoded) {
+      break;
+    }
+
+    decoded = nextValue;
+  }
+
+  return decoded.trim();
+};
 
 const stripHtml = (value = '') =>
   decodeXmlEntities(value)
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<\/?[^>]+>/g, ' ')
+    .replace(/&lt;\/?[^&]+&gt;/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
+    .replace(/\[[^\]]+\]/g, ' ')
+    .replace(/\s-\s(?:Google News|UOL|G1|Canaltech|Tecnoblog|Exame|Olhar Digital)\b.*$/i, '')
     .replace(/\s+/g, ' ')
     .trim();
 

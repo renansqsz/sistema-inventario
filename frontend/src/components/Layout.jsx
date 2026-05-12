@@ -3,6 +3,39 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { FiHome, FiBox, FiLogOut, FiMonitor, FiList, FiMenu, FiUserPlus, FiSun, FiMoon, FiInstagram, FiFacebook, FiLinkedin } from 'react-icons/fi';
 import Button from './ui/animated-button';
 
+const BigBigBrand = ({ isCollapsed }) => (
+  <div className={`sidebar-brand-card ${isCollapsed ? 'collapsed' : ''}`}>
+    <a
+      className="sidebar-brand-link"
+      href="https://big-big.streamlit.app/"
+      target="_blank"
+      rel="noreferrer"
+      title="BigBig"
+    >
+      <svg className="sidebar-brand-logo" viewBox="0 0 120 80" aria-hidden="true">
+        <defs>
+          <linearGradient id="bigbigGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#22d3ee" />
+            <stop offset="100%" stopColor="#1d4ed8" />
+          </linearGradient>
+        </defs>
+        <text
+          x="50%"
+          y="58%"
+          textAnchor="middle"
+          fontSize="52"
+          fontWeight="900"
+          letterSpacing="-6"
+          fill="url(#bigbigGradient)"
+          fontFamily="Arial, sans-serif"
+        >
+          BB
+        </text>
+      </svg>
+    </a>
+  </div>
+);
+
 function Layout({ onLogout }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isDark, setIsDark] = useState(() => {
@@ -52,6 +85,7 @@ function Layout({ onLogout }) {
             <FiUserPlus size={20} style={{ minWidth: '20px' }} />
             <span className="link-text">Colaboradores</span>
           </NavLink>
+          <BigBigBrand isCollapsed={isCollapsed} />
 
           <div className="logout-container">
             <Button onClick={onLogout} className="nav-link logout-link" style={{ width: '100%', border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left', fontSize: '1rem', padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }} title="Sair">
