@@ -1,6 +1,7 @@
-node_modules/
 .codex-logs/
 .vscode/
+__pycache__/
+.streamlit/
 *.log
 .env
 *.db
