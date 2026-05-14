@@ -3,6 +3,7 @@ from __future__ import annotations
 import html
 import re
 import sqlite3
+import unicodedata
 from datetime import date, datetime
 from email.utils import parsedate_to_datetime
 from io import BytesIO
@@ -83,7 +84,38 @@ HTML_ENTITY_MAP = {
 
 NEWS_FEED_URL = (
     "https://news.google.com/rss/search"
-    "?q=inteligencia+artificial&hl=pt-BR&gl=BR&ceid=BR:pt-419"
+    "?q=inteligencia+artificial+tecnologia+inovacao+-politica+-eleicoes+-governo+-TSE+-publico"
+    "&hl=pt-BR&gl=BR&ceid=BR:pt-419"
+)
+
+AI_NEWS_TERMS = (
+    "inteligencia artificial",
+    "ia generativa",
+    "machine learning",
+    "deep learning",
+    "modelo de linguagem",
+    "chatgpt",
+    "openai",
+    "gemini",
+    "claude",
+    "copilot",
+    "automacao",
+    "robotica",
+)
+
+BLOCKED_NEWS_TERMS = (
+    "politica",
+    "eleicao",
+    "eleicoes",
+    "tse",
+    "governo",
+    "governanca",
+    "servico publico",
+    "congresso",
+    "senado",
+    "camara",
+    "prefeitura",
+    "presidente",
 )
 
 
@@ -1040,6 +1072,19 @@ def strip_html(value: str = "") -> str:
     return text.strip()
 
 
+def normalize_news_text(value: str = "") -> str:
+    normalized = unicodedata.normalize("NFKD", value.lower())
+    normalized = "".join(char for char in normalized if not unicodedata.combining(char))
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def is_allowed_ai_news(title: str, description: str) -> bool:
+    text = normalize_news_text(f"{title} {description}")
+    has_ai_context = any(term in text for term in AI_NEWS_TERMS)
+    has_blocked_context = any(term in text for term in BLOCKED_NEWS_TERMS)
+    return has_ai_context and not has_blocked_context
+
+
 def _extract_tag_value(source: str, tag_name: str) -> str:
     match = re.search(rf"<{tag_name}[^>]*>([\s\S]*?)</{tag_name}>", source, flags=re.I)
     return match.group(1) if match else ""
@@ -1050,6 +1095,36 @@ def _parse_news_date(value: str) -> datetime:
         return parsedate_to_datetime(value)
     except Exception:
         return datetime.min
+
+
+def fallback_ai_news() -> list[dict[str, Any]]:
+    today_iso = datetime.utcnow().date().isoformat()
+    return [
+        {
+            "title": "Tendencias de IA em destaque",
+            "description": "Acompanhe os principais movimentos em inteligencia artificial enquanto o feed externo e recarregado.",
+            "image": TECH_BANNER_IMAGES[0],
+            "link": "https://news.google.com/search?q=inteligencia%20artificial%20tecnologia&hl=pt-BR&gl=BR&ceid=BR%3Apt-419",
+            "category": "IA",
+            "pubDate": today_iso,
+        },
+        {
+            "title": "Modelos, produtos e pesquisa em IA",
+            "description": "A versao Python mantem somente noticias relacionadas a IA, com foco em tecnologia e inovacao.",
+            "image": TECH_BANNER_IMAGES[1],
+            "link": "https://news.google.com/search?q=IA%20generativa%20Brasil&hl=pt-BR&gl=BR&ceid=BR%3Apt-419",
+            "category": "IA",
+            "pubDate": today_iso,
+        },
+        {
+            "title": "Atualizacao automatica ativada",
+            "description": "As tres postagens sao renovadas automaticamente para manter a secao sempre atualizada com IA.",
+            "image": TECH_BANNER_IMAGES[2],
+            "link": "https://news.google.com/search?q=novidades%20inteligencia%20artificial&hl=pt-BR&gl=BR&ceid=BR%3Apt-419",
+            "category": "IA",
+            "pubDate": today_iso,
+        },
+    ]
 
 
 def fetch_ai_news(limit: int = 3) -> list[dict[str, Any]]:
@@ -1068,6 +1143,8 @@ def fetch_ai_news(limit: int = 3) -> list[dict[str, Any]]:
             link = decode_html_entities(_extract_tag_value(item, "link"))
             description = strip_html(_extract_tag_value(item, "description"))
             pub_date = strip_html(_extract_tag_value(item, "pubDate"))
+            if not is_allowed_ai_news(title, description):
+                continue
             if title and link:
                 items.append(
                     {
@@ -1080,38 +1157,14 @@ def fetch_ai_news(limit: int = 3) -> list[dict[str, Any]]:
                     }
                 )
         items.sort(key=lambda item: _parse_news_date(item["pubDate"]), reverse=True)
-        if items:
+        if len(items) >= limit:
             return items[:limit]
+        if items:
+            return (items + fallback_ai_news())[:limit]
     except Exception:
         pass
 
-    today_iso = datetime.utcnow().date().isoformat()
-    return [
-        {
-            "title": "Tendencias de IA em destaque",
-            "description": "Acompanhe os principais movimentos em inteligencia artificial enquanto o feed externo e recarregado.",
-            "image": TECH_BANNER_IMAGES[0],
-            "link": "https://news.google.com/search?q=inteligencia%20artificial&hl=pt-BR&gl=BR&ceid=BR%3Apt-419",
-            "category": "IA",
-            "pubDate": today_iso,
-        },
-        {
-            "title": "Modelos, produtos e pesquisa em IA",
-            "description": "A versao Python mantem somente noticias relacionadas a IA, com foco em tecnologia e inovacao.",
-            "image": TECH_BANNER_IMAGES[1],
-            "link": "https://news.google.com/search?q=inteligencia%20artificial&hl=pt-BR&gl=BR&ceid=BR%3Apt-419",
-            "category": "IA",
-            "pubDate": today_iso,
-        },
-        {
-            "title": "Atualizacao automatica ativada",
-            "description": "As tres postagens sao renovadas automaticamente para manter a secao sempre atualizada com IA.",
-            "image": TECH_BANNER_IMAGES[2],
-            "link": "https://news.google.com/search?q=inteligencia%20artificial&hl=pt-BR&gl=BR&ceid=BR%3Apt-419",
-            "category": "IA",
-            "pubDate": today_iso,
-        },
-    ]
+    return fallback_ai_news()[:limit]
 
 
 def parse_iso_date(value: str | None) -> date:

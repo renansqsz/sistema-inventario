@@ -1,16 +1,18 @@
 from __future__ import annotations
 
+import html
 from datetime import date
 from typing import Any
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 from python_app import services
 
 
 st.set_page_config(
-    page_title="Sistema de Inventario em Python",
+    page_title="Gerenciamento de TI",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -20,6 +22,13 @@ NOTEBOOK_CONDITIONS = ["Novo", "Bom", "Razoavel", "Com Defeito"]
 NOTEBOOK_STATUSES = ["Em Estoque", "Em Uso", "Manutencao"]
 STORAGE_TYPES = ["SSD", "HD", "NVMe", "SSD + HD"]
 EMPLOYEE_OFFICE_OPTIONS = ["CampSoft", "Tocalivros"]
+NEWS_CACHE_VERSION = "ai-news-layout-v2"
+EQUIPMENT_SECTIONS = [
+    {"slug": "lista", "label": "Lista de Equipamentos"},
+    {"slug": "cadastrar", "label": "Novo Item"},
+    {"slug": "atribuir", "label": "Atribuir Equipamentos"},
+]
+NOTEBOOK_SECTIONS = {"lista", "cadastrar"}
 MENU_ITEMS = [
     {"page": "Dashboard", "label": "🖥️  Dashboard"},
     {"page": "Equipamentos", "label": "🧰  Equipamentos"},
@@ -29,13 +38,32 @@ MENU_ITEMS = [
 ]
 
 
-def inject_styles() -> None:
+def inject_styles(is_authenticated: bool = False) -> None:
     st.markdown(
         """
         <style>
         .block-container {
-            padding-top: 1.5rem;
+            padding-top: 6.25rem;
             padding-bottom: 2rem;
+        }
+        [data-testid="stHeader"] {
+            height: 5.75rem !important;
+            background: linear-gradient(135deg, #4f46e5, #4338ca) !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.24);
+            box-shadow: 0 16px 34px rgba(49, 46, 129, 0.18);
+            backdrop-filter: blur(16px) saturate(170%);
+            -webkit-backdrop-filter: blur(16px) saturate(170%);
+            animation: topMenuGlass linear both;
+            animation-timeline: scroll(root);
+            animation-range: 0 140px;
+        }
+        [data-testid="stToolbar"],
+        [data-testid="stDecoration"],
+        [data-testid="stStatusWidget"],
+        #MainMenu {
+            display: none !important;
+            visibility: hidden !important;
+            height: 0 !important;
         }
         .metric-card {
             background: linear-gradient(135deg, #ffffff, #eef2ff);
@@ -65,68 +93,237 @@ def inject_styles() -> None:
             border: 1px solid rgba(148, 163, 184, 0.24);
             border-radius: 18px;
             overflow: hidden;
-            background: #ffffff;
+            background-color: #111827;
+            background-image:
+                linear-gradient(180deg, rgba(15, 23, 42, 0.06) 0%, rgba(15, 23, 42, 0.2) 42%, rgba(15, 23, 42, 0.9) 100%),
+                var(--news-image);
+            background-position: center;
+            background-size: cover;
+            background-repeat: no-repeat;
             box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
-            min-height: 100%;
-            display: flex;
-            flex-direction: column;
-        }
-        .news-card [data-testid="stImage"] img {
+            position: relative;
             width: 100%;
-            height: 220px !important;
-            object-fit: cover;
+            height: clamp(340px, 25vw, 430px);
+            min-height: 340px;
+            display: flex;
+            align-items: flex-end;
         }
         .news-card-body {
+            width: 100%;
             padding: 1rem 1rem 1.2rem;
-            min-height: 180px;
+            background: linear-gradient(180deg, rgba(15, 23, 42, 0), rgba(15, 23, 42, 0.82) 34%, rgba(15, 23, 42, 0.96));
+            color: white;
         }
         .news-tag {
             display: inline-block;
             padding: 0.2rem 0.6rem;
             border-radius: 999px;
-            background: rgba(29, 78, 216, 0.1);
-            color: #1d4ed8;
+            background: rgba(255, 255, 255, 0.16);
+            color: #ffffff;
             font-size: 0.74rem;
             font-weight: 700;
             text-transform: uppercase;
             margin-bottom: 0.75rem;
         }
         .news-title {
-            font-size: 1.05rem;
+            font-size: clamp(0.95rem, 0.9vw, 1.08rem);
             font-weight: 800;
-            color: #111827;
+            color: #ffffff;
             margin-bottom: 0.55rem;
+            line-height: 1.25;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow-wrap: anywhere;
         }
         .news-description {
-            color: #4b5563;
-            font-size: 0.92rem;
-            line-height: 1.55;
-            min-height: 84px;
+            color: rgba(255, 255, 255, 0.88);
+            font-size: clamp(0.82rem, 0.78vw, 0.92rem);
+            line-height: 1.45;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow-wrap: anywhere;
         }
-        .sidebar-brand {
+        .news-footer {
             display: flex;
-            justify-content: center;
-            margin: 0.8rem 0 1.1rem;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-top: 1rem;
+            font-size: 0.82rem;
+            color: rgba(255, 255, 255, 0.78);
         }
-        .sidebar-brand a {
+        .news-action {
+            color: #ffffff !important;
+            font-weight: 800;
+            text-decoration: none !important;
+        }
+        .equipment-header-title {
+            margin: 0;
+            color: #0f172a;
+            font-size: 2.05rem;
+            font-weight: 850;
+            letter-spacing: -0.04em;
+        }
+        .equipment-header-spacer {
+            height: 0.35rem;
+        }
+        .st-key-equipment_export_excel button {
+            border: 1px solid rgba(100, 116, 139, 0.34) !important;
+            background: rgba(255, 255, 255, 0.62) !important;
+            color: #334155 !important;
+            font-weight: 800 !important;
+            box-shadow: none !important;
+        }
+        .st-key-equipment_export_excel button:hover {
+            border-color: rgba(15, 118, 110, 0.34) !important;
+            background: rgba(240, 253, 244, 0.88) !important;
+            color: #065f46 !important;
+        }
+        .st-key-equipment_assign_action button {
+            border: 1px solid rgba(51, 65, 85, 0.24) !important;
+            background: #111827 !important;
+            color: #ffffff !important;
+            font-weight: 800 !important;
+            box-shadow: 0 10px 20px rgba(15, 23, 42, 0.12) !important;
+        }
+        .st-key-equipment_assign_action button:hover {
+            background: #1f2937 !important;
+            color: #ffffff !important;
+        }
+        .st-key-equipment_new_action button {
+            border: 1px solid rgba(79, 70, 229, 0.24) !important;
+            background: linear-gradient(135deg, #4f46e5, #6d5dfc) !important;
+            color: #ffffff !important;
+            font-weight: 850 !important;
+            box-shadow: 0 12px 22px rgba(79, 70, 229, 0.24) !important;
+        }
+        .st-key-equipment_new_action button:hover {
+            background: linear-gradient(135deg, #4338ca, #5b4df5) !important;
+            color: #ffffff !important;
+        }
+        .st-key-equipment_back_to_list button {
+            border: 1px solid rgba(148, 163, 184, 0.35) !important;
+            background: rgba(248, 250, 252, 0.9) !important;
+            color: #475569 !important;
+            font-weight: 750 !important;
+            box-shadow: none !important;
+        }
+        .notebook-header-title {
+            margin: 0;
+            color: #0f172a;
+            font-size: 2.05rem;
+            font-weight: 850;
+            letter-spacing: -0.04em;
+        }
+        .notebook-header-spacer {
+            height: 0.35rem;
+        }
+        .st-key-notebook_export_excel button {
+            border: 1px solid rgba(100, 116, 139, 0.34) !important;
+            background: rgba(255, 255, 255, 0.62) !important;
+            color: #334155 !important;
+            font-weight: 800 !important;
+            box-shadow: none !important;
+        }
+        .st-key-notebook_export_excel button:hover {
+            border-color: rgba(37, 99, 235, 0.32) !important;
+            background: rgba(239, 246, 255, 0.9) !important;
+            color: #1d4ed8 !important;
+        }
+        .st-key-notebook_new_action button {
+            border: 1px solid rgba(37, 99, 235, 0.22) !important;
+            background: linear-gradient(135deg, #2563eb, #0891b2) !important;
+            color: #ffffff !important;
+            font-weight: 850 !important;
+            box-shadow: 0 12px 22px rgba(37, 99, 235, 0.2) !important;
+        }
+        .st-key-notebook_new_action button:hover {
+            background: linear-gradient(135deg, #1d4ed8, #0e7490) !important;
+            color: #ffffff !important;
+        }
+        .st-key-notebook_back_to_list button {
+            border: 1px solid rgba(148, 163, 184, 0.35) !important;
+            background: rgba(248, 250, 252, 0.9) !important;
+            color: #475569 !important;
+            font-weight: 750 !important;
+            box-shadow: none !important;
+        }
+        .equipment-section-title {
+            margin: 0 0 0.85rem;
+            color: #0f172a;
+            font-size: 1.25rem;
+            font-weight: 850;
+        }
+        .equipment-section-copy {
+            margin: -0.4rem 0 1.2rem;
+            color: #64748b;
+            font-size: 0.94rem;
+        }
+        .top-brand {
+            position: fixed;
+            top: 1.05rem;
+            right: 5.6rem;
+            z-index: 999999;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .top-brand a {
             text-decoration: none;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 86px;
-            height: 64px;
-            border-radius: 18px;
-            background: linear-gradient(135deg, rgba(34, 211, 238, 0.12), rgba(29, 78, 216, 0.18));
-            border: 1px solid rgba(59, 130, 246, 0.16);
+            width: 68px;
+            height: 48px;
+            border-radius: 14px;
+            background: linear-gradient(135deg, #4f46e5, #4338ca);
+            border: 1px solid rgba(79, 70, 229, 0.3);
+            overflow: visible;
+            box-shadow: 0 10px 18px rgba(79, 70, 229, 0.18);
+            backdrop-filter: blur(10px) saturate(160%);
+            -webkit-backdrop-filter: blur(10px) saturate(160%);
+            transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+            animation: topBrandGlass linear both;
+            animation-timeline: scroll(root);
+            animation-range: 0 120px;
         }
-        .sidebar-brand span {
-            font-size: 2rem;
+        @keyframes topMenuGlass {
+            from {
+                background: linear-gradient(135deg, #4f46e5, #4338ca);
+                box-shadow: 0 16px 34px rgba(49, 46, 129, 0.18);
+            }
+            to {
+                background: rgba(79, 70, 229, 0.52);
+                box-shadow: 0 16px 34px rgba(15, 23, 42, 0.12);
+            }
+        }
+        .top-brand span {
+            font-size: 1.55rem;
             font-weight: 900;
-            letter-spacing: -0.14em;
+            letter-spacing: 0;
             background: linear-gradient(135deg, #22d3ee, #1d4ed8);
             -webkit-background-clip: text;
             color: transparent;
             font-family: Arial, sans-serif;
+            line-height: 1;
+            display: block;
+        }
+        @keyframes topBrandGlass {
+            from {
+                background: linear-gradient(135deg, #4f46e5, #4338ca);
+                border-color: rgba(79, 70, 229, 0.3);
+                box-shadow: 0 10px 18px rgba(79, 70, 229, 0.18);
+            }
+            to {
+                background: rgba(79, 70, 229, 0.34);
+                border-color: rgba(255, 255, 255, 0.42);
+                box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+            }
         }
         [data-testid="stSidebar"] h1 {
             text-align: center;
@@ -187,6 +384,116 @@ def inject_styles() -> None:
             margin: 0;
             justify-content: flex-start;
         }
+        @media (max-width: 900px) {
+            .block-container {
+                padding-top: 5.8rem;
+            }
+            [data-testid="stHeader"] {
+                height: 5.2rem !important;
+            }
+            .top-brand {
+                top: 0.9rem;
+                right: 1rem;
+            }
+            .news-card {
+                height: 360px;
+                min-height: 360px;
+            }
+            .equipment-header-title {
+                font-size: 1.7rem;
+            }
+            .notebook-header-title {
+                font-size: 1.7rem;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    if is_authenticated:
+        st.markdown(
+            """
+            <style>
+            [data-testid="stHeader"] {
+                background: linear-gradient(135deg, #ffffff 0%, #f0f2f6 45%, #e8edf5 100%) !important;
+                border-bottom: 1px solid rgba(236, 253, 245, 0.24);
+                box-shadow: 0 14px 28px rgba(6, 78, 59, 0.14);
+                transition: background 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
+            }
+            .top-brand a {
+                background: linear-gradient(135deg, #ffffff 0%, #f0f2f6 45%, #e8edf5 100%) !important;
+                border-color: rgba(187, 247, 208, 0.32);
+                box-shadow: 0 10px 20px rgba(6, 78, 59, 0.16);
+            }
+            html.codex-header-scrolled [data-testid="stHeader"],
+            body.codex-header-scrolled [data-testid="stHeader"] {
+                background: rgba(15, 118, 110, 0.42) !important;
+                border-bottom-color: rgba(236, 253, 245, 0.38);
+                box-shadow: 0 14px 28px rgba(15, 23, 42, 0.1);
+            }
+            html.codex-header-scrolled .top-brand a,
+            body.codex-header-scrolled .top-brand a {
+                background: rgba(15, 118, 110, 0.3) !important;
+                border-color: rgba(236, 253, 245, 0.42);
+                box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+            }
+            [data-testid="stSidebar"] .stButton > button[kind="primary"] {
+                background: linear-gradient(135deg, #0f766e, #15803d);
+                border-color: rgba(21, 128, 61, 0.28);
+                box-shadow: 0 10px 18px rgba(6, 78, 59, 0.14);
+            }
+            [data-testid="stSidebar"] .stButton > button[kind="primary"]:hover {
+                background: linear-gradient(135deg, #0f6b63, #166534);
+            }
+            @keyframes topMenuGlass {
+                from {
+                    background: linear-gradient(135deg, #0f766e, #15803d);
+                    box-shadow: 0 14px 28px rgba(6, 78, 59, 0.14);
+                }
+                to {
+                    background: rgba(15, 118, 110, 0.46);
+                    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.1);
+                }
+            }
+            @keyframes topBrandGlass {
+                from {
+                    background: linear-gradient(135deg, #0f766e, #15803d);
+                    border-color: rgba(187, 247, 208, 0.32);
+                    box-shadow: 0 10px 20px rgba(6, 78, 59, 0.16);
+                }
+                to {
+                    background: rgba(15, 118, 110, 0.34);
+                    border-color: rgba(236, 253, 245, 0.44);
+                    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+                }
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+        return
+
+    st.markdown(
+        """
+        <style>
+        .block-container {
+            padding-top: 1.5rem !important;
+        }
+        [data-testid="stHeader"] {
+            height: 0 !important;
+            min-height: 0 !important;
+            background: transparent !important;
+            border: 0 !important;
+            box-shadow: none !important;
+        }
+        .top-brand {
+            display: none !important;
+        }
+        @media (max-width: 900px) {
+            .block-container {
+                padding-top: 1.5rem !important;
+            }
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -197,6 +504,8 @@ def init_session() -> None:
     services.init_db()
     st.session_state.setdefault("auth_user", None)
     st.session_state.setdefault("current_page", "Dashboard")
+    st.session_state.setdefault("equipment_section", "lista")
+    st.session_state.setdefault("notebook_section", "lista")
 
 
 def format_public_date(value: str) -> str:
@@ -239,8 +548,8 @@ def build_dataframe(items: list[dict[str, Any]], rename_map: dict[str, str], col
 def show_login() -> None:
     left, center, right = st.columns([1.2, 1, 1.2])
     with center:
-        st.markdown("## Sistema de Inventario em Python")
-        st.caption("Versao reescrita em Streamlit usando o mesmo SQLite.")
+        st.markdown("## Gerenciamento de Ativos")
+        st.caption("V1.0.0")
         with st.form("login_form", clear_on_submit=False):
             username = st.text_input("Usuario")
             password = st.text_input("Senha", type="password")
@@ -258,17 +567,84 @@ def show_login() -> None:
 
 
 @st.cache_data(ttl=900, show_spinner=False)
-def load_news() -> list[dict[str, Any]]:
+def load_news(cache_version: str = NEWS_CACHE_VERSION) -> list[dict[str, Any]]:
     return services.fetch_ai_news(limit=3)
+
+
+def render_top_brand() -> None:
+    st.markdown(
+        """
+        <div class="top-brand">
+            <a href="https://big-big.streamlit.app/" target="_blank" aria-label="Abrir BigBig">
+                <span>BB</span>
+            </a>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_header_scroll_script() -> None:
+    components.html(
+        """
+        <script>
+        (() => {
+            const parentWindow = window.parent;
+            const parentDocument = parentWindow.document;
+            const scrolledClass = "codex-header-scrolled";
+            const scrollSelectors = [
+                "[data-testid='stAppViewContainer']",
+                "[data-testid='stMain']",
+                ".stApp",
+                "section.main"
+            ];
+
+            const scrollTargets = () => [
+                parentWindow,
+                parentDocument,
+                parentDocument.documentElement,
+                parentDocument.body,
+                ...scrollSelectors
+                    .map((selector) => parentDocument.querySelector(selector))
+                    .filter(Boolean)
+            ];
+
+            const getScrollTop = () => Math.max(
+                parentWindow.scrollY || 0,
+                parentDocument.documentElement.scrollTop || 0,
+                parentDocument.body.scrollTop || 0,
+                ...scrollSelectors
+                    .map((selector) => parentDocument.querySelector(selector)?.scrollTop || 0)
+            );
+
+            const applyScrollState = () => {
+                const shouldUseGlass = getScrollTop() > 12;
+                parentDocument.documentElement.classList.toggle(scrolledClass, shouldUseGlass);
+                parentDocument.body.classList.toggle(scrolledClass, shouldUseGlass);
+            };
+
+            const requestApply = () => parentWindow.requestAnimationFrame(applyScrollState);
+            const bindScroll = () => {
+                scrollTargets().forEach((target) => {
+                    target.addEventListener("scroll", requestApply, { passive: true });
+                });
+                applyScrollState();
+            };
+
+            bindScroll();
+            parentWindow.setTimeout(bindScroll, 400);
+            parentWindow.setTimeout(applyScrollState, 900);
+        })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
 
 
 def render_sidebar() -> str:
     with st.sidebar:
         st.title("Dashboard - TI")
-        st.markdown(
-            '<div class="sidebar-brand"><a href="https://big-big.streamlit.app/" target="_blank"><span>BB</span></a></div>',
-            unsafe_allow_html=True,
-        )
         st.markdown('<div class="sidebar-menu-title">Menu</div>', unsafe_allow_html=True)
         for item in MENU_ITEMS:
             is_active = st.session_state["current_page"] == item["page"]
@@ -279,6 +655,10 @@ def render_sidebar() -> str:
                 type="primary" if is_active else "secondary",
             ):
                 st.session_state["current_page"] = item["page"]
+                if item["page"] == "Equipamentos":
+                    st.session_state["equipment_section"] = "lista"
+                elif item["page"] == "Notebooks":
+                    st.session_state["notebook_section"] = "lista"
                 st.rerun()
 
         st.divider()
@@ -294,7 +674,7 @@ def render_dashboard() -> None:
     metric_specs = [
         ("Equipamentos (Tipos)", stats["totalItems"]),
         ("Em Estoque (Tipos)", stats["inStock"]),
-        ("Em Falta", stats["outOfStock"]),
+        ("Itens em falta (Tipos)", stats["outOfStock"]),
         ("Colaboradores", stats["totalEmployees"]),
         ("Notebooks", stats["totalNotebooks"]),
         ("Itens Alocados", stats["assignedItems"]),
@@ -315,56 +695,130 @@ def render_dashboard() -> None:
 
     st.subheader("Informativos & Novidades")
     news_columns = st.columns(3)
-    for column, item in zip(news_columns, load_news()):
+    for column, item in zip(news_columns, load_news(NEWS_CACHE_VERSION)):
         with column:
-            st.markdown('<div class="news-card">', unsafe_allow_html=True)
-            st.image(item["image"], use_container_width=True)
+            title = html.escape(str(item["title"]))
+            description = html.escape(str(item["description"]))
+            category = html.escape(str(item["category"]))
+            image = html.escape(str(item["image"]), quote=True)
+            link = html.escape(str(item["link"]), quote=True)
+            public_date = html.escape(format_public_date(item["pubDate"]))
             st.markdown(
                 f"""
-                <div class="news-card-body">
-                    <div class="news-tag">{item["category"]}</div>
-                    <div class="news-title">{item["title"]}</div>
-                    <div class="news-description">{item["description"]}</div>
-                </div>
+                <article class="news-card" style="--news-image: url('{image}');" aria-label="{title}">
+                    <div class="news-card-body">
+                        <div class="news-tag">{category}</div>
+                        <div class="news-title">{title}</div>
+                        <div class="news-description">{description}</div>
+                        <div class="news-footer">
+                            <span>{public_date}</span>
+                            <a class="news-action" href="{link}" target="_blank">Ler mais</a>
+                        </div>
+                    </div>
+                </article>
                 """,
                 unsafe_allow_html=True,
             )
-            st.caption(format_public_date(item["pubDate"]))
-            st.link_button("Ler mais", item["link"], use_container_width=True)
-            st.markdown("</div>", unsafe_allow_html=True)
 
 
-def render_equipments() -> None:
-    st.title("Equipamentos")
-    equipments = services.list_equipments()
+def get_equipment_section() -> str:
+    selected = st.session_state.get("equipment_section", "lista")
+    valid_sections = {section["slug"] for section in EQUIPMENT_SECTIONS}
+    return selected if selected in valid_sections else "lista"
 
-    search_column, status_column = st.columns([2, 1])
-    with search_column:
-        search = st.text_input("Buscar por nome, categoria ou numero de serie", key="equipment_search")
-    with status_column:
-        status_filter = st.selectbox("Status", ["Todos", "Em estoque", "Em falta"], key="equipment_status")
 
-    filtered = filter_items(equipments, search, "status", status_filter)
-    equipment_table = build_dataframe(
-        filtered,
-        {
-            "id": "ID",
-            "name": "Nome",
-            "category": "Categoria",
-            "totalQuantity": "Qtd. Total",
-            "availableQuantity": "Qtd. Disponivel",
-            "status": "Status",
-            "location": "Localizacao",
-        },
-        ["id", "name", "category", "totalQuantity", "availableQuantity", "status", "location"],
+def set_equipment_section(section: str) -> None:
+    st.session_state["equipment_section"] = section
+    st.rerun()
+
+
+def render_equipment_header() -> None:
+    title_column, export_column, assign_column, new_column = st.columns([1.9, 0.55, 0.72, 0.5])
+    with title_column:
+        st.markdown('<h1 class="equipment-header-title">Equipamentos</h1>', unsafe_allow_html=True)
+    with export_column:
+        st.download_button(
+            "Exportar Excel",
+            data=services.export_equipments_report(),
+            file_name="inventario_ti_python.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="equipment_export_excel",
+            icon=":material/download:",
+            on_click="ignore",
+            use_container_width=True,
+        )
+    with assign_column:
+        if st.button(
+            "Atribuir Equipamentos",
+            key="equipment_assign_action",
+            icon=":material/person_add:",
+            use_container_width=True,
+        ):
+            set_equipment_section("atribuir")
+    with new_column:
+        if st.button("Novo Item", key="equipment_new_action", icon=":material/add:", use_container_width=True):
+            st.session_state["equipment_editor_select"] = None
+            set_equipment_section("cadastrar")
+    st.markdown('<div class="equipment-header-spacer"></div>', unsafe_allow_html=True)
+
+
+def render_equipment_back_button() -> None:
+    if st.button("Voltar para listagem", key="equipment_back_to_list"):
+        set_equipment_section("lista")
+
+
+def render_equipment_section_intro(title: str, description: str) -> None:
+    st.markdown(
+        f"""
+        <h3 class="equipment-section-title">{html.escape(title)}</h3>
+        <p class="equipment-section-copy">{html.escape(description)}</p>
+        """,
+        unsafe_allow_html=True,
     )
-    st.dataframe(equipment_table, use_container_width=True, hide_index=True)
 
-    manage_tab, assign_tab, history_tab, export_tab = st.tabs(
-        ["Cadastrar / Editar", "Atribuir", "Historico", "Exportar"]
-    )
 
-    with manage_tab:
+def render_equipment_list(equipments: list[dict[str, Any]]) -> None:
+    with st.container(border=True):
+        search_column, status_column = st.columns([2, 1])
+        with search_column:
+            search = st.text_input(
+                "Buscar equipamento",
+                key="equipment_search",
+                placeholder="Buscar por nome, categoria ou numero de serie...",
+                label_visibility="collapsed",
+            )
+        with status_column:
+            status_filter = st.selectbox(
+                "Status",
+                ["Todos", "Em estoque", "Em falta"],
+                key="equipment_status",
+                label_visibility="collapsed",
+            )
+
+        filtered = filter_items(equipments, search, "status", status_filter)
+        equipment_table = build_dataframe(
+            filtered,
+            {
+                "id": "ID",
+                "name": "Nome",
+                "category": "Categoria",
+                "totalQuantity": "Qtd. Total",
+                "availableQuantity": "Qtd. Disponivel",
+                "status": "Status",
+                "location": "Localização",
+            },
+            ["id", "name", "category", "totalQuantity", "availableQuantity", "status", "location"],
+        )
+        st.dataframe(equipment_table, use_container_width=True, hide_index=True)
+
+
+def render_equipment_editor(equipments: list[dict[str, Any]]) -> None:
+    with st.container(border=True):
+        render_equipment_section_intro(
+            "Novo Item",
+            "Inclua um novo item ou selecione um equipamento existente para atualizar seus dados.",
+        )
+        render_equipment_back_button()
         categories = [item["name"] for item in services.list_categories()]
         selected_equipment = st.selectbox(
             "Selecionar equipamento para editar",
@@ -435,73 +889,96 @@ def render_equipments() -> None:
             except ValueError as error:
                 st.error(str(error))
 
-    with assign_tab:
+
+def render_equipment_assignment(equipments: list[dict[str, Any]]) -> None:
+    with st.container(border=True):
+        render_equipment_section_intro(
+            "Atribuir Equipamentos",
+            "Registre a entrega de itens para colaboradores e atualize o saldo disponivel automaticamente.",
+        )
+        render_equipment_back_button()
         employees = services.list_employees()
         offices = services.list_offices()
         if not equipments or not employees:
             st.info("Cadastre equipamentos e colaboradores antes de fazer atribuicoes.")
-        else:
-            office = st.selectbox("Escritorio", offices, key="assign_office")
-            employees_for_office = [employee for employee in employees if employee["escritorio"] == office]
-            with st.form("assignment_form"):
-                equipment = st.selectbox(
-                    "Equipamento",
-                    equipments,
-                    format_func=lambda item: f"#{item['id']} - {item['name']} | {item['category']} | disponivel: {item['availableQuantity']}",
-                )
-                quantity = st.number_input("Quantidade", min_value=1, value=1)
-                employee = st.selectbox(
-                    "Funcionario",
-                    employees_for_office,
-                    format_func=lambda item: item["nome"],
-                )
-                assign_submitted = st.form_submit_button("Confirmar atribuicao")
+            return
 
-            st.write(
-                f"Disponivel: `{equipment['availableQuantity']}` | Localizacao: `{equipment['location']}`"
+        office = st.selectbox("Escritorio", offices, key="assign_office")
+        employees_for_office = [employee for employee in employees if employee["escritorio"] == office]
+        if not employees_for_office:
+            st.info("Nenhum colaborador encontrado para este escritorio.")
+            return
+
+        with st.form("assignment_form"):
+            equipment = st.selectbox(
+                "Equipamento",
+                equipments,
+                format_func=lambda item: f"#{item['id']} - {item['name']} | {item['category']} | disponivel: {item['availableQuantity']}",
             )
-            if assign_submitted:
-                try:
-                    services.assign_equipment(
-                        equipment_id=equipment["id"],
-                        employee_id=employee["id"],
-                        quantity=int(quantity),
-                        office=office,
-                    )
-                    st.success("Atribuicao realizada com sucesso.")
-                    st.rerun()
-                except ValueError as error:
-                    st.error(str(error))
+            quantity = st.number_input("Quantidade", min_value=1, value=1)
+            employee = st.selectbox(
+                "Funcionario",
+                employees_for_office,
+                format_func=lambda item: item["nome"],
+            )
+            assign_submitted = st.form_submit_button("Confirmar atribuicao")
 
-    with history_tab:
+        st.write(f"Disponivel: `{equipment['availableQuantity']}` | Localizacao: `{equipment['location']}`")
+        if assign_submitted:
+            try:
+                services.assign_equipment(
+                    equipment_id=equipment["id"],
+                    employee_id=employee["id"],
+                    quantity=int(quantity),
+                    office=office,
+                )
+                st.success("Atribuicao realizada com sucesso.")
+                st.rerun()
+            except ValueError as error:
+                st.error(str(error))
+
+
+def render_equipment_history(equipments: list[dict[str, Any]]) -> None:
+    with st.container(border=True):
+        render_equipment_section_intro(
+            "Histórico",
+            "Visualize os movimentos de atribuicao registrados para cada equipamento.",
+        )
         if not equipments:
             st.info("Nenhum equipamento cadastrado.")
-        else:
-            history_equipment = st.selectbox(
-                "Equipamento para historico",
-                equipments,
-                format_func=lambda item: f"#{item['id']} - {item['name']}",
-                key="history_equipment_select",
-            )
-            history = services.get_equipment_history(history_equipment["id"])
-            if history:
-                history_table = build_dataframe(
-                    history,
-                    {
-                        "equipmentName": "Equipamento",
-                        "employeeName": "Funcionario",
-                        "office": "Escritorio",
-                        "quantity": "Quantidade",
-                        "movementType": "Movimento",
-                        "createdAt": "Criado em",
-                    },
-                    ["equipmentName", "employeeName", "office", "quantity", "movementType", "createdAt"],
-                )
-                st.dataframe(history_table, use_container_width=True, hide_index=True)
-            else:
-                st.info("Nenhum historico encontrado para este equipamento.")
+            return
 
-    with export_tab:
+        history_equipment = st.selectbox(
+            "Equipamento para historico",
+            equipments,
+            format_func=lambda item: f"#{item['id']} - {item['name']}",
+            key="history_equipment_select",
+        )
+        history = services.get_equipment_history(history_equipment["id"])
+        if history:
+            history_table = build_dataframe(
+                history,
+                {
+                    "equipmentName": "Equipamento",
+                    "employeeName": "Funcionario",
+                    "office": "Escritorio",
+                    "quantity": "Quantidade",
+                    "movementType": "Movimento",
+                    "createdAt": "Criado em",
+                },
+                ["equipmentName", "employeeName", "office", "quantity", "movementType", "createdAt"],
+            )
+            st.dataframe(history_table, use_container_width=True, hide_index=True)
+        else:
+            st.info("Nenhum historico encontrado para este equipamento.")
+
+
+def render_equipment_export() -> None:
+    with st.container(border=True):
+        render_equipment_section_intro(
+            "Exportar",
+            "Gere uma planilha Excel com o inventario atual de equipamentos.",
+        )
         st.download_button(
             "Baixar inventario em Excel",
             data=services.export_equipments_report(),
@@ -511,7 +988,20 @@ def render_equipments() -> None:
         )
 
 
-def render_notebooks() -> None:
+def render_equipments() -> None:
+    render_equipment_header()
+    active_section = get_equipment_section()
+
+    equipments = services.list_equipments()
+    if active_section == "cadastrar":
+        render_equipment_editor(equipments)
+    elif active_section == "atribuir":
+        render_equipment_assignment(equipments)
+    else:
+        render_equipment_list(equipments)
+
+
+def render_notebooks_legacy() -> None:
     st.title("Notebooks")
     notebooks = services.list_notebooks()
     notebook_status_options = sorted(
@@ -525,7 +1015,7 @@ def render_notebooks() -> None:
 
     search_column, status_column = st.columns([2, 1])
     with search_column:
-        search = st.text_input("Buscar por marca, modelo ou numero de serie", key="notebook_search")
+        search = st.text_input("Buscar por marca, modelo ou número de série", key="notebook_search")
     with status_column:
         status_filter = st.selectbox("Status", ["Todos"] + notebook_status_options, key="notebook_status")
 
@@ -536,7 +1026,7 @@ def render_notebooks() -> None:
             "id": "ID",
             "brand": "Marca",
             "model": "Modelo",
-            "serialNumber": "Numero de Serie",
+            "serialNumber": "Número de Série",
             "processor": "Processador",
             "ramTotal": "RAM",
             "status": "Status",
@@ -647,6 +1137,200 @@ def render_notebooks() -> None:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True,
         )
+
+
+def get_notebook_section() -> str:
+    selected = st.session_state.get("notebook_section", "lista")
+    return selected if selected in NOTEBOOK_SECTIONS else "lista"
+
+
+def set_notebook_section(section: str) -> None:
+    st.session_state["notebook_section"] = section
+    st.rerun()
+
+
+def get_notebook_status_options(notebooks: list[dict[str, Any]]) -> list[str]:
+    return sorted(
+        {
+            status
+            for status in NOTEBOOK_STATUSES
+            + [str(notebook.get("status", "")).strip() for notebook in notebooks]
+            if status
+        }
+    )
+
+
+def render_notebook_header() -> None:
+    title_column, export_column, new_column = st.columns([2.1, 0.55, 0.7])
+    with title_column:
+        st.markdown('<h1 class="notebook-header-title">Notebooks</h1>', unsafe_allow_html=True)
+    with export_column:
+        st.download_button(
+            "Exportar Excel",
+            data=services.export_notebooks_report(),
+            file_name="inventario_notebooks_python.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="notebook_export_excel",
+            icon=":material/download:",
+            on_click="ignore",
+            use_container_width=True,
+        )
+    with new_column:
+        if st.button("Novo Notebook", key="notebook_new_action", icon=":material/add:", use_container_width=True):
+            st.session_state["notebook_editor_select"] = None
+            set_notebook_section("cadastrar")
+    st.markdown('<div class="notebook-header-spacer"></div>', unsafe_allow_html=True)
+
+
+def render_notebook_back_button() -> None:
+    if st.button("Voltar para listagem", key="notebook_back_to_list"):
+        set_notebook_section("lista")
+
+
+def render_notebook_list(notebooks: list[dict[str, Any]], notebook_status_options: list[str]) -> None:
+    with st.container(border=True):
+        search_column, status_column = st.columns([2, 1])
+        with search_column:
+            search = st.text_input(
+                "Buscar notebook",
+                key="notebook_search",
+                placeholder="Buscar por marca, modelo ou número de série...",
+                label_visibility="collapsed",
+            )
+        with status_column:
+            status_filter = st.selectbox(
+                "Status",
+                ["Todos"] + notebook_status_options,
+                key="notebook_status",
+                label_visibility="collapsed",
+            )
+
+        filtered = filter_items(notebooks, search, "status", status_filter)
+        notebook_table = build_dataframe(
+            filtered,
+            {
+                "id": "ID",
+                "brand": "Marca",
+                "model": "Modelo",
+                "serialNumber": "Número de Série",
+                "processor": "Processador",
+                "ramTotal": "RAM",
+                "status": "Status",
+            },
+            ["id", "brand", "model", "serialNumber", "processor", "ramTotal", "status"],
+        )
+        st.dataframe(notebook_table, use_container_width=True, hide_index=True)
+
+
+def render_notebook_editor(notebooks: list[dict[str, Any]], notebook_status_options: list[str]) -> None:
+    with st.container(border=True):
+        render_equipment_section_intro(
+            "Novo Notebook",
+            "Cadastre um novo notebook ou selecione um registro existente para editar as informacoes.",
+        )
+        render_notebook_back_button()
+        selected_notebook = st.selectbox(
+            "Selecionar notebook para editar",
+            [None] + notebooks,
+            format_func=lambda item: "Novo notebook" if item is None else f"#{item['id']} - {item['brand']} {item['model']}",
+            key="notebook_editor_select",
+        )
+        current = selected_notebook or {
+            "brand": "",
+            "model": "",
+            "serialNumber": "",
+            "processor": "",
+            "gpu": "",
+            "screenSize": "",
+            "ramTotal": 8,
+            "ramSticks": 1,
+            "storageType": "SSD",
+            "storageCapacity": "",
+            "condition": "Novo",
+            "location": "",
+            "status": "Em Estoque",
+            "entryDate": date.today().isoformat(),
+        }
+        condition_options = list(dict.fromkeys([current["condition"]] + NOTEBOOK_CONDITIONS))
+        storage_options = list(dict.fromkeys([current["storageType"]] + STORAGE_TYPES))
+        status_options = list(dict.fromkeys([current["status"]] + notebook_status_options))
+
+        with st.form("notebook_form"):
+            brand = st.text_input("Marca", value=current["brand"])
+            model = st.text_input("Modelo", value=current["model"])
+            serial_number = st.text_input("Numero de serie / Service Tag", value=current["serialNumber"] or "")
+            processor = st.text_input("Processador", value=current["processor"] or "")
+            left, right = st.columns(2)
+            with left:
+                gpu = st.text_input("Placa de video", value=current["gpu"] or "")
+                ram_total = st.number_input("RAM total (GB)", min_value=1, value=int(current["ramTotal"]))
+                storage_type = st.selectbox(
+                    "Tipo de armazenamento",
+                    storage_options,
+                    index=storage_options.index(current["storageType"]) if current["storageType"] in storage_options else 0,
+                )
+                condition = st.selectbox(
+                    "Condicao",
+                    condition_options,
+                    index=condition_options.index(current["condition"]) if current["condition"] in condition_options else 0,
+                )
+            with right:
+                screen_size = st.text_input("Tela", value=current["screenSize"] or "")
+                ram_sticks = st.number_input("Qtd. de pentes RAM", min_value=1, value=int(current["ramSticks"]))
+                storage_capacity = st.text_input("Capacidade do armazenamento", value=current["storageCapacity"] or "")
+                status = st.selectbox(
+                    "Status",
+                    status_options,
+                    index=status_options.index(current["status"]) if current["status"] in status_options else 0,
+                )
+            location = st.text_input("Localizacao", value=current["location"] or "")
+            entry_date = st.date_input("Data de entrada", value=services.parse_iso_date(current["entryDate"]))
+            submitted = st.form_submit_button("Salvar notebook")
+
+        if submitted:
+            try:
+                payload = {
+                    "id": current.get("id"),
+                    "brand": brand,
+                    "model": model,
+                    "serialNumber": serial_number,
+                    "processor": processor,
+                    "gpu": gpu,
+                    "screenSize": screen_size,
+                    "ramTotal": int(ram_total),
+                    "ramSticks": int(ram_sticks),
+                    "storageType": storage_type,
+                    "storageCapacity": storage_capacity,
+                    "condition": condition,
+                    "location": location,
+                    "status": status,
+                    "entryDate": entry_date.isoformat(),
+                }
+                services.upsert_notebook(payload)
+                st.success("Notebook salvo com sucesso.")
+                st.rerun()
+            except ValueError as error:
+                st.error(str(error))
+
+        if selected_notebook and st.button("Excluir notebook selecionado", key="notebook_delete"):
+            try:
+                services.delete_notebook(selected_notebook["id"])
+                st.success("Notebook excluido com sucesso.")
+                st.rerun()
+            except ValueError as error:
+                st.error(str(error))
+
+
+def render_notebooks() -> None:
+    render_notebook_header()
+    active_section = get_notebook_section()
+    notebooks = services.list_notebooks()
+    notebook_status_options = get_notebook_status_options(notebooks)
+
+    if active_section == "cadastrar":
+        render_notebook_editor(notebooks, notebook_status_options)
+    else:
+        render_notebook_list(notebooks, notebook_status_options)
 
 
 def render_categories() -> None:
@@ -837,13 +1521,16 @@ def render_employees() -> None:
 
 
 def main() -> None:
-    inject_styles()
     init_session()
+    is_authenticated = bool(st.session_state["auth_user"])
+    inject_styles(is_authenticated)
 
-    if not st.session_state["auth_user"]:
+    if not is_authenticated:
         show_login()
         return
 
+    render_top_brand()
+    render_header_scroll_script()
     page = render_sidebar()
     if page == "Dashboard":
         render_dashboard()
